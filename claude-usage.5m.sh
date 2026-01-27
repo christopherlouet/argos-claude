@@ -3,7 +3,7 @@
 # Compact display of Claude Code usage statistics
 # Refresh: every 5 minutes
 
-set -euo pipefail
+# Note: Pas de "set -euo pipefail" pour éviter que le menu Argos se fige en cas d'erreur
 export LC_NUMERIC=C
 
 # ============================================================================
@@ -24,23 +24,26 @@ declare -A CACHE_WRITE_PRICE=(["claude-opus-4-5-20251101"]=6.25 ["claude-sonnet-
 # ============================================================================
 
 format_tokens() {
-    local num="$1"
+    local num="${1:-0}"
+    [[ ! "$num" =~ ^[0-9]+$ ]] && num=0
     if (( num >= 1000000 )); then
-        printf "%.1fM" "$(echo "scale=1; $num / 1000000" | bc)"
+        printf "%.1fM" "$(echo "scale=1; $num / 1000000" | bc 2>/dev/null || echo "0")"
     elif (( num >= 1000 )); then
-        printf "%.0fK" "$(echo "scale=0; $num / 1000" | bc)"
+        printf "%.0fK" "$(echo "scale=0; $num / 1000" | bc 2>/dev/null || echo "0")"
     else
         printf "%d" "$num"
     fi
 }
 
 format_cost() {
-    local amount="$1"
+    local amount="${1:-0}"
+    [[ ! "$amount" =~ ^[0-9.]+$ ]] && amount=0
     printf "\$%.0f" "$amount"
 }
 
 format_cost_detail() {
-    local amount="$1"
+    local amount="${1:-0}"
+    [[ ! "$amount" =~ ^[0-9.]+$ ]] && amount=0
     printf "\$%'.0f" "$amount" | sed 's/,/ /g'
 }
 
@@ -56,9 +59,13 @@ get_model_short() {
 sparkline() {
     local -a values=("$@")
     local chars=("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█")
-    local max=1 spark="" idx
-    for v in "${values[@]}"; do (( v > max )) && max=$v; done
+    local max=1 spark="" idx v
+    [[ ${#values[@]} -eq 0 ]] && { echo "▁▁▁▁▁▁▁"; return; }
     for v in "${values[@]}"; do
+        [[ "$v" =~ ^[0-9]+$ ]] && (( v > max )) && max=$v
+    done
+    for v in "${values[@]}"; do
+        [[ ! "$v" =~ ^[0-9]+$ ]] && v=0
         idx=$(( (v * 7) / max ))
         (( idx > 7 )) && idx=7
         spark+="${chars[$idx]}"
@@ -82,8 +89,8 @@ today=$(date +%Y-%m-%d)
 
 # Extract all daily data in a single jq call (optimized)
 daily_data=$(echo "$stats" | jq -c '
-    [.dailyModelTokens[] | {date: .date, tokens: (.tokensByModel | to_entries | map(.value) | add // 0)}]
-')
+    [.dailyModelTokens[]? | {date: .date, tokens: (.tokensByModel | to_entries | map(.value) | add // 0)}]
+' 2>/dev/null) || daily_data="[]"
 
 # Today's tokens
 today_tokens=$(echo "$daily_data" | jq -r --arg d "$today" '.[] | select(.date == $d) | .tokens // 0')
@@ -98,8 +105,8 @@ primary_model=$(echo "$stats" | jq -r --arg d "$today" '
 # Week tokens + sparkline data (optimized: single jq call)
 week_start=$(date -d "6 days ago" +%Y-%m-%d)
 week_json=$(echo "$daily_data" | jq -c --arg start "$week_start" '
-    [.[] | select(.date >= $start) | {date: .date, tokens: .tokens}] | sort_by(.date)
-')
+    [.[]? | select(.date >= $start) | {date: .date, tokens: .tokens}] | sort_by(.date)
+' 2>/dev/null) || week_json="[]"
 
 declare -a week_data=()
 week_tokens=0
@@ -119,7 +126,7 @@ month_tokens=$(echo "$daily_data" | jq -r --arg start "$month_start" '
 month_tokens=${month_tokens:-0}
 
 # Total tokens & days
-total_tokens=$(echo "$stats" | jq '[.dailyModelTokens[].tokensByModel | to_entries[].value] | add // 0')
+total_tokens=$(echo "$stats" | jq '[.dailyModelTokens[]?.tokensByModel | to_entries[]?.value] | add // 0' 2>/dev/null) || total_tokens=0
 first_date=$(echo "$stats" | jq -r '.firstSessionDate // ""' | cut -d'T' -f1)
 if [[ -n "$first_date" ]]; then
     days_since=$(( ($(date +%s) - $(date -d "$first_date" +%s)) / 86400 ))
@@ -143,7 +150,7 @@ last_project=$(ls -t ~/.claude/projects/*/sessions-index.json 2>/dev/null | head
 calc_total_cost() {
     local cost=0
     local model_data
-    model_data=$(echo "$stats" | jq -c '.modelUsage | to_entries[]')
+    model_data=$(echo "$stats" | jq -c '.modelUsage | to_entries[]?' 2>/dev/null) || model_data=""
 
     while IFS= read -r entry; do
         [[ -z "$entry" ]] && continue
@@ -156,14 +163,14 @@ calc_total_cost() {
         cr=$(echo "$entry" | jq -r '.value.cacheReadInputTokens // 0')
         cw=$(echo "$entry" | jq -r '.value.cacheCreationInputTokens // 0')
 
-        mc=$(echo "scale=2; ($i * ${INPUT_PRICE[$model]:-5} + $o * ${OUTPUT_PRICE[$model]:-25} + $cr * ${CACHE_READ_PRICE[$model]:-0.5} + $cw * ${CACHE_WRITE_PRICE[$model]:-6.25}) / 1000000" | bc)
-        cost=$(echo "scale=2; $cost + $mc" | bc)
+        mc=$(echo "scale=2; ($i * ${INPUT_PRICE[$model]:-5} + $o * ${OUTPUT_PRICE[$model]:-25} + $cr * ${CACHE_READ_PRICE[$model]:-0.5} + $cw * ${CACHE_WRITE_PRICE[$model]:-6.25}) / 1000000" | bc 2>/dev/null) || mc=0
+        cost=$(echo "scale=2; $cost + $mc" | bc 2>/dev/null) || cost=$cost
     done <<< "$model_data"
     echo "$cost"
 }
 
-total_cost=$(calc_total_cost)
-total_daily=$(echo "$stats" | jq '[.dailyModelTokens[].tokensByModel | to_entries[].value] | add // 1')
+total_cost=$(calc_total_cost 2>/dev/null) || total_cost=0
+total_daily=$(echo "$stats" | jq '[.dailyModelTokens[]?.tokensByModel | to_entries[]?.value] | add // 1' 2>/dev/null) || total_daily=1
 
 # Proportional costs
 cost_week=$(echo "scale=0; $total_cost * $week_tokens / $total_daily" | bc 2>/dev/null || echo "0")
