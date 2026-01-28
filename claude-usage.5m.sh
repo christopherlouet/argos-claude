@@ -3,7 +3,7 @@
 # Compact display of Claude Code usage statistics
 # Refresh: every 5 minutes
 
-# Note: Pas de "set -euo pipefail" pour éviter que le menu Argos se fige en cas d'erreur
+# Note: No "set -euo pipefail" to avoid freezing the Argos menu on errors
 export LC_NUMERIC=C
 
 # ============================================================================
@@ -80,7 +80,7 @@ sparkline() {
 if [[ ! -f "$STATS_FILE" ]]; then
     echo "󰧑  — | color=#888888"
     echo "---"
-    echo "Pas de données Claude Code"
+    echo "No Claude Code data"
     exit 0
 fi
 
@@ -95,6 +95,11 @@ daily_data=$(echo "$stats" | jq -c '
 # Today's tokens
 today_tokens=$(echo "$daily_data" | jq -r --arg d "$today" '.[] | select(.date == $d) | .tokens // 0')
 today_tokens=${today_tokens:-0}
+
+# Yesterday's tokens (fallback when today is 0)
+yesterday=$(date -d "1 day ago" +%Y-%m-%d)
+yesterday_tokens=$(echo "$daily_data" | jq -r --arg d "$yesterday" '.[] | select(.date == $d) | .tokens // 0')
+yesterday_tokens=${yesterday_tokens:-0}
 
 # Primary model today
 primary_model=$(echo "$stats" | jq -r --arg d "$today" '
@@ -183,7 +188,7 @@ cost_month=$(echo "scale=0; $total_cost * $month_tokens / $total_daily" | bc 2>/
 model_short=$(get_model_short "$primary_model")
 week_display=$(format_tokens "$week_tokens")
 
-# Panel: tokens week | model | cost/week
+# Panel: weekly tokens | model | cost/week
 # Show active sessions count only if > 2 (script + at least 2 claude instances)
 if (( active > 2 )); then
     echo "󰧑  ${week_display} │ ${model_short} │   ${active}"
@@ -199,22 +204,23 @@ echo "---"
 echo "  Claude Code  ${sub} | size=11"
 echo "---"
 
-# Activity section - adjust hierarchy based on today's tokens
-echo "ACTIVITÉ | color=#888888 size=9"
+# Usage section
+echo "USAGE | color=#888888 size=9"
 if (( today_tokens > 0 )); then
-    echo "├─ Aujourd'hui   $(format_tokens "$today_tokens") | font=monospace"
-    echo "├─ Semaine       $(format_tokens "$week_tokens")  $(sparkline "${week_data[@]}") | font=monospace"
+    echo "├─ Today         $(format_tokens "$today_tokens") | font=monospace"
 else
-    echo "├─ Semaine       $(format_tokens "$week_tokens")  $(sparkline "${week_data[@]}") | font=monospace"
+    echo "├─ Yesterday     $(format_tokens "$yesterday_tokens") | font=monospace"
 fi
-echo "└─ Total         $(format_tokens "$total_tokens")  (${days_since}j) | font=monospace"
+echo "├─ This week     $(format_tokens "$week_tokens")  $(sparkline "${week_data[@]}") | font=monospace"
+echo "├─ This month    $(format_tokens "$month_tokens") | font=monospace"
+echo "└─ All time      $(format_tokens "$total_tokens")  (${days_since}d) | font=monospace"
 echo "---"
 
 # Savings section
-echo "ÉCONOMIES vs API | color=#888888 size=9"
-echo "├─ Semaine       $(format_cost_detail "$cost_week") | font=monospace color=#4CAF50"
-echo "├─ Mois          $(format_cost_detail "$cost_month") | font=monospace color=#4CAF50"
-echo "└─ Total         $(format_cost_detail "$total_cost") | font=monospace color=#4CAF50"
+echo "SAVINGS vs API | color=#888888 size=9"
+echo "├─ This week     $(format_cost_detail "$cost_week") | font=monospace color=#4CAF50"
+echo "├─ This month    $(format_cost_detail "$cost_month") | font=monospace color=#4CAF50"
+echo "└─ All time      $(format_cost_detail "$total_cost") | font=monospace color=#4CAF50"
 echo "---"
 
 # Current project
@@ -224,5 +230,5 @@ if [[ -n "$last_project" ]]; then
 fi
 
 # Actions
-echo "󰔃  Voir usage sur claude.ai | href=https://claude.ai/settings/usage"
-echo "󰅂  Rafraîchir | refresh=true"
+echo "󰔃  View usage on claude.ai | href=https://claude.ai/settings/usage"
+echo "󰅂  Refresh | refresh=true"
