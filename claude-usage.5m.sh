@@ -196,25 +196,25 @@ fi
 # ============================================================================
 
 echo "---"
-echo "<b>  Claude Code</b> <small>${sub}</small> | useMarkup=true"
+echo "  Claude Code  ${sub} | size=11"
 echo "---"
 
 # Activity section - adjust hierarchy based on today's tokens
-echo "<small>ACTIVITÉ</small> | color=#888888 size=9 useMarkup=true"
+echo "ACTIVITÉ | color=#888888 size=9"
 if (( today_tokens > 0 )); then
-    echo "├─ Aujourd'hui   <b>$(format_tokens "$today_tokens")</b> | useMarkup=true font=monospace"
-    echo "├─ Semaine       <b>$(format_tokens "$week_tokens")</b>  <small>$(sparkline "${week_data[@]}")</small> | useMarkup=true font=monospace"
+    echo "├─ Aujourd'hui   $(format_tokens "$today_tokens") | font=monospace"
+    echo "├─ Semaine       $(format_tokens "$week_tokens")  $(sparkline "${week_data[@]}") | font=monospace"
 else
-    echo "├─ Semaine       <b>$(format_tokens "$week_tokens")</b>  <small>$(sparkline "${week_data[@]}")</small> | useMarkup=true font=monospace"
+    echo "├─ Semaine       $(format_tokens "$week_tokens")  $(sparkline "${week_data[@]}") | font=monospace"
 fi
-echo "└─ Total         <b>$(format_tokens "$total_tokens")</b>  <small>(${days_since}j)</small> | useMarkup=true font=monospace"
+echo "└─ Total         $(format_tokens "$total_tokens")  (${days_since}j) | font=monospace"
 echo "---"
 
 # Savings section
-echo "<small>ÉCONOMIES vs API</small> | color=#888888 size=9 useMarkup=true"
-echo "├─ Semaine       <b>$(format_cost_detail "$cost_week")</b> | useMarkup=true font=monospace color=#4CAF50"
-echo "├─ Mois          <b>$(format_cost_detail "$cost_month")</b> | useMarkup=true font=monospace color=#4CAF50"
-echo "└─ Total         <b>$(format_cost_detail "$total_cost")</b> | useMarkup=true font=monospace color=#4CAF50"
+echo "ÉCONOMIES vs API | color=#888888 size=9"
+echo "├─ Semaine       $(format_cost_detail "$cost_week") | font=monospace color=#4CAF50"
+echo "├─ Mois          $(format_cost_detail "$cost_month") | font=monospace color=#4CAF50"
+echo "└─ Total         $(format_cost_detail "$total_cost") | font=monospace color=#4CAF50"
 echo "---"
 
 # Current project
